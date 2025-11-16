@@ -86,7 +86,7 @@ dependencies {
     implementation("com.google.mlkit:vision-common:17.3.0")
 //    implementation("com.google.mlkit:pose-detection:18.0.0-beta5")
     //그냥 mlkit는 정확도 잘 안나와서 accurate로 바꿔봄ㅇㅅㅇ
-    implementation("com.google.mlkit:pose-detection-accurate:18.0.0-beta5")
+//    implementation("com.google.mlkit:pose-detection-accurate:18.0.0-beta5")
     
     // Object Detection (손 인식을 위해 Custom Model과 함께 사용)
 

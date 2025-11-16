@@ -95,6 +95,7 @@ class MainActivity : AppCompatActivity() {
         cameraManager = CameraXManager(this, previewView)
 
         val multiAnalyzer = MultiAnalyzer(
+            this,
             // 4개의 모든 결과(텍스트+박스, 손가락, 너비, 높이)를 받는 단일 콜백
             onAnalysisComplete = { textsAndBoxes, fingerPoint, imageWidth, imageHeight ->
 
