@@ -1,26 +1,21 @@
 // File: MultiAnalyzer.kt
 package com.example.kioskassistapp.ocr
 
-import android.content.ContentValues.TAG
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.graphics.PointF
 import android.graphics.Rect
 import android.os.SystemClock
 import android.util.Log
-import androidx.annotation.VisibleForTesting
 import androidx.annotation.OptIn
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
-import androidx.camera.core.impl.utils.MatrixExt.postRotate
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.korean.KoreanTextRecognizerOptions
 import com.google.mediapipe.framework.image.BitmapImageBuilder
-import com.google.mediapipe.framework.image.MPImage
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.core.Delegate
 import com.google.mediapipe.tasks.vision.core.RunningMode
@@ -31,13 +26,13 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 class MultiAnalyzer(
-    private val context: Context,  // 👈 Context for HandLandmarker
+    private val context: Context,
     /**
      * 모든 분석(OCR, Pose)이 완료되었을 때 호출되는 단일 콜백
-     * @param textsAndBoxes (텍스트 String, 박스 Rect) 쌍의 리스트
-     * @param fingerTip 감지된 손가락 좌표 (없으면 null)
-     * @param imageWidth 분석에 사용된 이미지의 너비
-     * @param imageHeight 분석에 사용된 이미지의 높이
+     * @param textsAndBoxes (텍스트 String, 박스 Rect) 쌍의 리스트 (확대된 좌표 기준)
+     * @param fingerTip 감지된 손가락 좌표 (없으면 null) (확대된 좌표 기준)
+     * @param imageWidth 분석에 사용된 이미지의 너비 (확대된 너비)
+     * @param imageHeight 분석에 사용된 이미지의 높이 (확대된 높이)
      */
     private val onAnalysisComplete: (List<Pair<String, Rect>>, PointF?, Int, Int) -> Unit
 ) : ImageAnalysis.Analyzer {
@@ -45,47 +40,64 @@ class MultiAnalyzer(
     private val executor = Executors.newFixedThreadPool(2)
     private val TAG = "MultiAnalyzer"
 
+    // 한글 인식기 옵션
     private val ocrRecognizer = TextRecognition.getClient(KoreanTextRecognizerOptions.Builder().build())
 
-    // ▼▼▼ [통합] HandLandmarkerHelper (제공된 코드 기반, IMAGE mode로 설정)
+    // HandLandmarkerHelper 초기화
     private val handLandmarkerHelper = HandLandmarkerHelper(
-        minHandDetectionConfidence = 0.5f,
-        minHandTrackingConfidence = 0.5f,
-        minHandPresenceConfidence = 0.5f,
-        maxNumHands = 1,
-        currentDelegate = HandLandmarkerHelper.DELEGATE_CPU,  // GPU는 테스트 후 변경
+        minHandDetectionConfidence = HandLandmarkerHelper.DEFAULT_HAND_DETECTION_CONFIDENCE,
+        minHandTrackingConfidence = HandLandmarkerHelper.DEFAULT_HAND_TRACKING_CONFIDENCE,
+        minHandPresenceConfidence = HandLandmarkerHelper.DEFAULT_HAND_PRESENCE_CONFIDENCE,
+        maxNumHands = HandLandmarkerHelper.DEFAULT_NUM_HANDS,
+        currentDelegate = HandLandmarkerHelper.DELEGATE_CPU,
         runningMode = RunningMode.IMAGE,
         context = context
     )
-    // ▲▲▲
 
-    // ▼▼▼ 마지막 분석 시간을 저장할 변수 추가 ▼▼▼
     private var lastAnalysisTime = 0L
+
+    // ▼▼▼ [핵심] 인식률 향상을 위한 확대 배율 (1.5배 추천) ▼▼▼
+    private val SCALE_FACTOR = 1.5f
 
     @OptIn(ExperimentalGetImage::class)
     override fun analyze(imageProxy: ImageProxy) {
-        // ▼▼▼ 3초 간격 체크 로직 추가 ▼▼▼
         val currentTime = System.currentTimeMillis()
-        if (currentTime - lastAnalysisTime < 3000) { // 3000ms = 3초
-            imageProxy.close() // 3초가 안 지났으면 프레임 닫고 즉시 종료
-            return
-        }
-        // 3초가 지났으면, 현재 시간을 마지막 분석 시간으로 기록
-        lastAnalysisTime = currentTime
-        // ▲▲▲
-        val mediaImage = imageProxy.image
-        if (mediaImage == null) {
+        if (currentTime - lastAnalysisTime < 1500) {
             imageProxy.close()
             return
         }
+        lastAnalysisTime = currentTime
 
+        // 1. ImageProxy를 Bitmap으로 변환 (회전 정보 적용)
+        val bitmap = imageProxy.toBitmap()
         val rotation = imageProxy.imageInfo.rotationDegrees
-        val inputImage = InputImage.fromMediaImage(mediaImage, rotation)
+        val matrix = Matrix().apply {
+            postRotate(rotation.toFloat())
+        }
 
-        // ▼▼▼ 이미지 크기를 콜백으로 전달하기 위해 저장 ▼▼▼
-        val imageWidth = inputImage.width
-        val imageHeight = inputImage.height
-        // ▲▲▲
+        // 회전이 적용된 원본 Bitmap
+        val originalBitmap = Bitmap.createBitmap(
+            bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true
+        )
+
+        // 2. OCR 인식률을 높이기 위해 이미지 확대 (Upscaling)
+        // createScaledBitmap의 마지막 인자 true는 안티앨리어싱(부드럽게 처리) 적용
+        val scaledWidth = (originalBitmap.width * SCALE_FACTOR).toInt()
+        val scaledHeight = (originalBitmap.height * SCALE_FACTOR).toInt()
+
+        val scaledBitmap = Bitmap.createScaledBitmap(
+            originalBitmap,
+            scaledWidth,
+            scaledHeight,
+            true
+        )
+
+        // 분석 기준 크기는 이제 '확대된 이미지' 크기입니다.
+        val processWidth = scaledWidth
+        val processHeight = scaledHeight
+
+        // 이미지 변환이 끝났으므로 imageProxy는 닫아도 됩니다. (메모리 절약)
+        imageProxy.close()
 
         val latch = CountDownLatch(2)
 
@@ -95,48 +107,46 @@ class MultiAnalyzer(
 
         executor.execute {
             try {
-                // 🔹 OCR Task (기존 그대로)
+                // 🔹 OCR Task (확대된 scaledBitmap 사용)
+                val inputImage = InputImage.fromBitmap(scaledBitmap, 0)
+
                 ocrRecognizer.process(inputImage)
                     .addOnSuccessListener { visionText ->
                         for (block in visionText.textBlocks) {
                             block.boundingBox?.let { box ->
-                                // 텍스트와 Rect를 Pair로 묶어 리스트에 추가
+                                // box는 scaledBitmap 기준의 좌표 (이미 확대된 상태)
                                 detectedTexts.add(block.text to box)
-                                Log.d(TAG, "Detected Text: '${block.text}' at $box")
+                                Log.d(TAG, "OCR Text: '${block.text}' at $box")
                             }
                         }
                     }
                     .addOnFailureListener { Log.e(TAG, "OCR Failure", it) }
                     .addOnCompleteListener { latch.countDown() }
 
-                // 🔹 Hand Task (HandLandmarkerHelper 사용)
-                val bitmap = imageProxy.toBitmap()  // 👈 Extension 사용
-                val matrix = Matrix().apply {
-                    postRotate(rotation.toFloat())  // ImageProxy rotation 적용
-                    // isFrontCamera면 플립 추가: postScale(-1f, 1f, bitmap.width / 2f, bitmap.height / 2f)
-                }
-                val rotatedBitmap = Bitmap.createBitmap(
-                    bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true
-                )
-                val resultBundle = handLandmarkerHelper.detectImage(rotatedBitmap)  // detectImage 호출
+                // 🔹 Hand Task (속도를 위해 originalBitmap 사용 권장)
+                // 손 인식은 해상도보다 특징점이 중요하므로 원본을 써도 충분합니다.
+                val resultBundle = handLandmarkerHelper.detectImage(originalBitmap)
+
                 if (resultBundle != null && resultBundle.results.isNotEmpty()) {
-                    val handResult = resultBundle.results[0]  // 첫 번째 손 결과
-                    val landmarks = handResult.landmarks()  // List<NormalizedLandmark>
+                    val handResult = resultBundle.results[0]
+                    val landmarks = handResult.landmarks()
                     if (landmarks.isNotEmpty()) {
                         // 오른손 검지 끝 (index 8: RIGHT_INDEX_FINGER_TIP)
-                        val rightIndexLandmark = landmarks[0][8]  // landmarks[hand][landmarkIndex]
-                        // Normalized → Pixel 변환 (confidence 체크 제거)
-                        val x = rightIndexLandmark.x() * imageWidth
-                        val y = rightIndexLandmark.y() * imageHeight
-                        fingerTip = PointF(x, y)
-                        Log.d(TAG, "Detected Finger Tip: ($x, $y)")
-                    } else {
-                        Log.w(TAG, "No landmarks detected")
+                        val rightIndexLandmark = landmarks[0][8]
+
+                        // Normalized(0~1) -> Pixel 변환 (원본 크기 기준)
+                        val originalX = rightIndexLandmark.x() * originalBitmap.width
+                        val originalY = rightIndexLandmark.y() * originalBitmap.height
+
+                        // ▼▼▼ [좌표 보정] OCR 결과(확대됨)와 좌표계를 맞추기 위해 확대 배율을 곱함 ▼▼▼
+                        val scaledX = originalX * SCALE_FACTOR
+                        val scaledY = originalY * SCALE_FACTOR
+
+                        fingerTip = PointF(scaledX, scaledY)
+                        Log.d(TAG, "Finger Tip: ($scaledX, $scaledY)")
                     }
-                } else {
-                    Log.w(TAG, "No hand results")
                 }
-                latch.countDown()  // 👈 동기 detect이니 직접 countDown()
+                latch.countDown()
 
             } catch (e: Exception) {
                 Log.e(TAG, "Analysis Error", e)
@@ -146,24 +156,23 @@ class MultiAnalyzer(
 
             // 🔹 모든 Task 완료 대기
             try {
-                if (latch.await(7, TimeUnit.SECONDS)) {  // Hand Landmarker 무거움 → 7초
-                    // ▼▼▼ 모든 결과를 단일 콜백으로 전달 ▼▼▼
-                    onAnalysisComplete(detectedTexts, fingerTip, imageWidth, imageHeight)
-                    Log.d("OverlayDebug", "Original fingerPoint: $fingerTip (image: ${imageWidth}x${imageHeight})")
+                if (latch.await(5, TimeUnit.SECONDS)) {
+                    // UI에는 확대된 크기(processWidth, processHeight)와 그에 맞는 좌표들을 전달
+                    onAnalysisComplete(detectedTexts, fingerTip, processWidth, processHeight)
                 } else {
                     Log.w(TAG, "Timeout on tasks")
                 }
             } catch (e: InterruptedException) {
                 Log.e(TAG, "Latch await interrupted", e)
             } finally {
-                imageProxy.close()
-                // Bitmap 해제 (메모리 누수 방지)
-                // bitmap?.recycle()  // 필요 시 추가
+                // 비트맵 메모리 해제 시도 (선택 사항)
+                // originalBitmap.recycle()
+                // scaledBitmap.recycle()
             }
         }
     }
 
-    // ▼▼▼ [임베드] HandLandmarkerHelper 클래스 (제공된 코드 기반, Listener 제거 – IMAGE mode라 불필요)
+    // ▼▼▼ Helper 클래스 (기존 유지) ▼▼▼
     private class HandLandmarkerHelper(
         var minHandDetectionConfidence: Float = DEFAULT_HAND_DETECTION_CONFIDENCE,
         var minHandTrackingConfidence: Float = DEFAULT_HAND_TRACKING_CONFIDENCE,
@@ -174,6 +183,7 @@ class MultiAnalyzer(
         val context: Context
     ) {
         private var handLandmarker: HandLandmarker? = null
+
         init {
             setupHandLandmarker()
         }
@@ -204,11 +214,10 @@ class MultiAnalyzer(
                 val options = optionsBuilder.build()
                 handLandmarker = HandLandmarker.createFromOptions(context, options)
             } catch (e: Exception) {
-                Log.e(TAG, "Hand Landmarker failed to initialize: ${e.message}")
+                Log.e("HandLandmarkerHelper", "Hand Landmarker failed to initialize: ${e.message}")
             }
         }
 
-        // IMAGE mode용 detectImage (제공된 코드 기반)
         fun detectImage(image: Bitmap): ResultBundle? {
             if (runningMode != RunningMode.IMAGE) {
                 throw IllegalArgumentException("RunningMode must be IMAGE")
@@ -228,7 +237,7 @@ class MultiAnalyzer(
         }
 
         companion object {
-            private const val MP_HAND_LANDMARKER_TASK = "hand_landmarker.task"  // 👈 assets/ 파일
+            private const val MP_HAND_LANDMARKER_TASK = "hand_landmarker.task"
             const val DELEGATE_CPU = 0
             const val DELEGATE_GPU = 1
             const val DEFAULT_HAND_DETECTION_CONFIDENCE = 0.5f
@@ -244,5 +253,4 @@ class MultiAnalyzer(
             val inputImageWidth: Int
         )
     }
-    // ▲▲▲
 }
