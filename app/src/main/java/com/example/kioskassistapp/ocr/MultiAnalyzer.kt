@@ -81,7 +81,6 @@ class MultiAnalyzer(
         )
 
         // 2. OCR 인식률을 높이기 위해 이미지 확대 (Upscaling)
-        // createScaledBitmap의 마지막 인자 true는 안티앨리어싱(부드럽게 처리) 적용
         val scaledWidth = (originalBitmap.width * SCALE_FACTOR).toInt()
         val scaledHeight = (originalBitmap.height * SCALE_FACTOR).toInt()
 
@@ -92,11 +91,9 @@ class MultiAnalyzer(
             true
         )
 
-        // 분석 기준 크기는 이제 '확대된 이미지' 크기입니다.
         val processWidth = scaledWidth
         val processHeight = scaledHeight
 
-        // 이미지 변환이 끝났으므로 imageProxy는 닫아도 됩니다. (메모리 절약)
         imageProxy.close()
 
         val latch = CountDownLatch(2)
@@ -123,8 +120,7 @@ class MultiAnalyzer(
                     .addOnFailureListener { Log.e(TAG, "OCR Failure", it) }
                     .addOnCompleteListener { latch.countDown() }
 
-                // 🔹 Hand Task (속도를 위해 originalBitmap 사용 권장)
-                // 손 인식은 해상도보다 특징점이 중요하므로 원본을 써도 충분합니다.
+                // 🔹 Hand Task
                 val resultBundle = handLandmarkerHelper.detectImage(originalBitmap)
 
                 if (resultBundle != null && resultBundle.results.isNotEmpty()) {
@@ -165,14 +161,14 @@ class MultiAnalyzer(
             } catch (e: InterruptedException) {
                 Log.e(TAG, "Latch await interrupted", e)
             } finally {
-                // 비트맵 메모리 해제 시도 (선택 사항)
+                // 비트맵 메모리 해제 시도
                 // originalBitmap.recycle()
                 // scaledBitmap.recycle()
             }
         }
     }
 
-    // ▼▼▼ Helper 클래스 (기존 유지) ▼▼▼
+    // ▼▼▼ Helper 클래스 ▼▼▼
     private class HandLandmarkerHelper(
         var minHandDetectionConfidence: Float = DEFAULT_HAND_DETECTION_CONFIDENCE,
         var minHandTrackingConfidence: Float = DEFAULT_HAND_TRACKING_CONFIDENCE,

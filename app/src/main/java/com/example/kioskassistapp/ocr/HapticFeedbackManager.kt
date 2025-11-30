@@ -15,55 +15,55 @@ class HapticFeedbackManager(private val context: Context) {
     private val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
     private var lastVibrateTime = 0L
     private val VIBRATE_COOLDOWN = 1000L // 1초 쿨타임
-    private val DISTANCE_THRESHOLD = 200 // px
+    private val DISTANCE_THRESHOLD = 600 // px
 
-    fun checkAndVibrate(fingerPoint: PointF?, textBoxes: List<Rect>?) {
+    /**
+     * fingerPoint: 손가락 좌표
+     * selectedBox: 음성 인식 결과와 유사도가 가장 높은, 선택된 텍스트 박스 하나
+     */
+    fun checkAndVibrate(fingerPoint: PointF?, selectedBox: Rect?) {
 
         Log.d("HapticDebug", "--- New Frame ---")
-        Log.d("HapticDebug", "Finger: $fingerPoint | Box count: ${textBoxes?.size}")
+        Log.d("HapticDebug", "Finger: $fingerPoint | selectedBox: $selectedBox")
 
-
-        if (fingerPoint == null || textBoxes.isNullOrEmpty()) {
-            Log.d("HapticDebug", "-> RETURN (Null or Empty)") // 👈 [로그 추가]
+        if (fingerPoint == null || selectedBox == null) {
+            Log.d("HapticDebug", "-> RETURN (fingerPoint or selectedBox is null)")
             return
         }
 
-        // ▼▼▼ [디버깅을 위해 로직 수정] ▼▼▼
-        // 가장 가까운 박스와의 거리를 계산
-        var minDistance = Float.MAX_VALUE
-        textBoxes.forEach { box ->
-            val centerX = box.centerX().toFloat()
-            val centerY = box.centerY().toFloat()
-            val distance = hypot(fingerPoint.x - centerX, fingerPoint.y - centerY)
-            if (distance < minDistance) {
-                minDistance = distance
-            }
-        }
+        // 선택된 박스의 중심점 계산
+        val centerX = selectedBox.centerX().toFloat()
+        val centerY = selectedBox.centerY().toFloat()
+        val distance = hypot(fingerPoint.x - centerX, fingerPoint.y - centerY)
 
-        // 가장 가까운 거리를 로그로 출력
-        Log.d("HapticDebug", "Min distance to a box: $minDistance | Threshold: $DISTANCE_THRESHOLD")
+        Log.d(
+            "HapticDebug",
+            "Distance to selectedBox center: $distance | Threshold: $DISTANCE_THRESHOLD"
+        )
 
-        // 임계값(Threshold) 비교
-        val isCloseToAnyBox = minDistance <= DISTANCE_THRESHOLD
-
-        if (!isCloseToAnyBox) {
-            Log.d("HapticDebug", "-> RETURN (Not close enough)") // 👈 [로그 추가]
+        if (distance > DISTANCE_THRESHOLD) {
+            Log.d("HapticDebug", "-> RETURN (Not close enough to selectedBox)")
             return
         }
-
 
         val currentTime = System.currentTimeMillis()
         if (currentTime - lastVibrateTime < VIBRATE_COOLDOWN) {
-            Log.d("HapticDebug", "-> RETURN (Cooldown active)") // 👈 [로그 추가]
+            Log.d("HapticDebug", "-> RETURN (Cooldown active)")
             return
         }
 
-        Log.d("HapticDebug", "!!! VIBRATING !!!") // 👈 [로그 추가]
+        Log.d("HapticDebug", "!!! VIBRATING on selectedBox !!!")
         lastVibrateTime = currentTime
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator.vibrate(VibrationEffect.createOneShot(150, VibrationEffect.DEFAULT_AMPLITUDE))
+            vibrator.vibrate(
+                VibrationEffect.createOneShot(
+                    150,
+                    VibrationEffect.DEFAULT_AMPLITUDE
+                )
+            )
         } else {
+            @Suppress("DEPRECATION")
             vibrator.vibrate(150)
         }
     }
