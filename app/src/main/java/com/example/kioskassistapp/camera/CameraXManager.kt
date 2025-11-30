@@ -36,7 +36,7 @@ class CameraXManager(
                         it.setSurfaceProvider(previewView.surfaceProvider)
                     }
                 val resolutionSelector = ResolutionSelector.Builder()
-                    // 4:3 비율을 유지하되 (OCR은 4:3이 화각이 넓어 유리함)
+                    // 4:3 비율
                     .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
                     .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY)
                     .build()

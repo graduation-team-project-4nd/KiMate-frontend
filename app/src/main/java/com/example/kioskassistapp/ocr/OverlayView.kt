@@ -96,12 +96,12 @@ class OverlayView(context: Context, attrs: AttributeSet?) : View(context, attrs)
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
-        // 1. 변환된 모든 박스를 화면에 그립니다. (기존 로직)
+
         for (box in boxes) {
             canvas.drawRect(box, paint)
         }
 
-        // 2. ▼▼▼ [추가됨] 손가락 좌표 그리기 ▼▼▼
+        //  ▼▼▼ 손가락 좌표 그리기 ▼▼▼
         fingerPoint?.let { point ->
             // PointF를 Matrix로 변환하기 위해 FloatArray 사용
             val pointArray = floatArrayOf(point.x, point.y)
