@@ -87,14 +87,14 @@ dependencies {
 //    implementation("com.google.mlkit:pose-detection:18.0.0-beta5")
     //그냥 mlkit는 정확도 잘 안나와서 accurate로 바꿔봄ㅇㅅㅇ
 //    implementation("com.google.mlkit:pose-detection-accurate:18.0.0-beta5")
-    
-    // Object Detection (손 인식을 위해 Custom Model과 함께 사용)
-
 
 
     // --- 3. mediapipe ---
     implementation("com.google.mediapipe:tasks-vision:0.10.29")
     // --- 4. Coroutines (비동기 처리) ---
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    // --- 5. 서버 reftrofit ---
+    implementation("com.squareup.retrofit2:retrofit:2.11.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.11.0")
 
 }
