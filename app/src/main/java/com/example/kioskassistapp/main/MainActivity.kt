@@ -10,8 +10,10 @@ import android.widget.Button
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.view.PreviewView
+import androidx.lifecycle.lifecycleScope
 import com.example.kioskassistapp.R
 import com.example.kioskassistapp.camera.CameraXManager
+import com.example.kioskassistapp.network.RetrofitClient
 import com.example.kioskassistapp.ocr.HapticFeedbackManager
 import com.example.kioskassistapp.ocr.MultiAnalyzer
 import com.example.kioskassistapp.ocr.OverlayView
@@ -19,7 +21,10 @@ import com.example.kioskassistapp.util.PermissionUtils
 import com.example.kioskassistapp.voice.SpeechRecognizerManager
 import com.example.kioskassistapp.voice.TtsManager
 import com.example.kioskassistapp.util.TextSimilarity
-
+import kotlinx.coroutines.launch
+import com.example.kioskassistapp.model.AnalyzeRequest // import 추가
+import com.example.kioskassistapp.model.DialogueItem // import 추가
+import com.example.kioskassistapp.model.SessionRequest // import 추가
 class MainActivity : AppCompatActivity() {
 
     private lateinit var cameraManager: CameraXManager
@@ -33,7 +38,7 @@ class MainActivity : AppCompatActivity() {
     private var lastSpokenTime = 0L
 
     private val handler = Handler(Looper.getMainLooper())
-
+    private var currentSessionId: String? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -64,6 +69,7 @@ class MainActivity : AppCompatActivity() {
                 speechManager.startListening()
             }, 1000L)
         }
+        createSession()
     }
 
     override fun onRequestPermissionsResult(
@@ -153,4 +159,57 @@ class MainActivity : AppCompatActivity() {
         speechManager.stopListening()
         handler.removeCallbacksAndMessages(null)
     }
+    // ⭐ 1. 세션 생성 함수
+    private fun createSession() {
+        lifecycleScope.launch {
+            try {
+                val response = RetrofitClient.api.createSession(SessionRequest())
+                if (response.isSuccessful && response.body() != null) {
+                    currentSessionId = response.body()?.id
+                    Log.d("API", "세션 생성 성공: $currentSessionId")
+
+                    // 세션이 만들어진 후 테스트 호출
+                    testAiApi()
+                } else {
+                    Log.e("API", "세션 생성 실패: ${response.code()}")
+                }
+            } catch (e: Exception) {
+                Log.e("API", "네트워크 에러(세션): ${e.message}")
+            }
+        }
+    }
+
+    // ⭐ 2. 실제 AI 분석 요청 테스트 (기존 testAiApi 교체)
+    private fun testAiApi() {
+        val sessionId = currentSessionId ?: return // 세션 ID 없으면 리턴
+
+        lifecycleScope.launch {
+            try {
+                // 더미 데이터로 요청 생성
+                val request = AnalyzeRequest(
+                    sessionId = sessionId,
+                    userInput = "커피 주문하고 싶어",
+                    ocrTexts = listOf("아메리카노", "라떼", "주문하기"),
+                    dialogueHistory = listOf(DialogueItem("user", "안녕")),
+                    lastBtn = "unknown"
+                )
+
+                val res = RetrofitClient.api.analyze(request)
+
+                if (res.isSuccessful) {
+                    val aiResult = res.body()
+                    Log.d("API_TEST", "AI 분석 결과: ${aiResult?.reasoning}")
+                    Log.d("API_TEST", "추천 행동: ${aiResult?.recommendedActions}")
+
+                    // TTS로 결과 읽어주기 (테스트)
+                    aiResult?.reasoning?.let { ttsManager.speak(it) }
+                } else {
+                    Log.e("API_TEST", "AI 요청 실패: ${res.code()}")
+                }
+            } catch (e: Exception) {
+                Log.e("API_TEST", "에러: ${e.message}", e)
+            }
+        }
+    }
+
 }
