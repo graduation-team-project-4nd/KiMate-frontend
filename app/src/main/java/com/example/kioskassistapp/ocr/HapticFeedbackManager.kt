@@ -19,12 +19,12 @@ class HapticFeedbackManager(private val context: Context) {
     // 설정 값
     private val DISTANCE_THRESHOLD = 1200 // 감지 시작 거리 (기존 600 -> 1200으로 확장)
 
-    // 진동 간격 (ms) : 가까우면 100ms, 멀면 800ms
+    // 진동 간격 (ms) : 가까우면 100ms,
     private val MIN_INTERVAL = 100L
-    private val MAX_INTERVAL = 1200L
+    private val MAX_INTERVAL = 800L
 
-    // 진동 세기 (1~255) : 가까우면 255(최대), 멀면 150(약함)
-    private val MIN_AMPLITUDE = 150
+    // 진동 세기 (1~255) :
+    private val MIN_AMPLITUDE = 100
     private val MAX_AMPLITUDE = 255
 
     /**
