@@ -18,4 +18,6 @@ interface AiApiService {
     suspend fun analyze(
         @Body request: AnalyzeRequest
     ): Response<AiResponse>
+
+
 }
