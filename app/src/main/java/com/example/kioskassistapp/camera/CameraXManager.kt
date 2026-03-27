@@ -51,12 +51,18 @@ class CameraXManager(
                 val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
                 cameraProvider?.unbindAll()
-                cameraProvider?.bindToLifecycle(
+
+                // bindToLifecycle은 Camera 객체를 반환합니다. 이를 변수에 저장합니다.
+                val camera = cameraProvider?.bindToLifecycle(
                     context as androidx.lifecycle.LifecycleOwner,
                     cameraSelector,
                     preview,
                     imageAnalysis
                 )
+
+                // 카메라 컨트롤을 가져와서 줌 비율을 0.6(초광각)으로 설정합니다.
+                camera?.cameraControl?.setZoomRatio(0.6f)
+
             } catch (e: Exception) {
                 Log.e("CameraXManager", "카메라 시작 실패: ${e.message}")
             }

@@ -48,7 +48,7 @@ class MultiAnalyzer(
     private val handLandmarkerHelper = HandLandmarkerHelper(
         minHandDetectionConfidence = 0.5f,
         minHandTrackingConfidence = 0.5f,
-        minHandPresenceConfidence = 0.001f,
+        minHandPresenceConfidence = 0.5f,
         maxNumHands = HandLandmarkerHelper.DEFAULT_NUM_HANDS,
         currentDelegate = HandLandmarkerHelper.DELEGATE_CPU,
         runningMode = RunningMode.IMAGE,
@@ -164,10 +164,7 @@ class MultiAnalyzer(
 //                            handLandmarks[20]  // Pinky
                         )
 
-                        // 5개의 손가락 중 화면 가장 위쪽(Y좌표가 가장 작은 값)에 있는 손가락을 선택
-                        // (키오스크를 누르거나 가리킬 때 가장 튀어나온 손가락을 인식)
                         val activeFinger = fingerTips.minByOrNull { it.y() }
-
                         if (activeFinger != null) {
                             // Normalized(0~1) -> Pixel 변환 (원본 크기 기준)
                             val originalX = activeFinger.x() * originalBitmap.width
@@ -259,13 +256,6 @@ class MultiAnalyzer(
             setupHandLandmarker()
         }
 
-        fun clearHandLandmarker() {
-            handLandmarker?.close()
-            handLandmarker = null
-        }
-
-        fun isClose(): Boolean = handLandmarker == null
-
         fun setupHandLandmarker() {
             val baseOptionBuilder = BaseOptions.builder()
             when (currentDelegate) {
@@ -290,9 +280,6 @@ class MultiAnalyzer(
         }
 
         fun detectImage(image: Bitmap): ResultBundle? {
-//            if (runningMode != RunningMode.IMAGE) {
-//                throw IllegalArgumentException("RunningMode must be IMAGE")
-//            }
             val startTime = SystemClock.uptimeMillis()
             val mpImage = BitmapImageBuilder(image).build()
             handLandmarker?.detect(mpImage)?.also { landmarkResult ->
@@ -315,7 +302,7 @@ class MultiAnalyzer(
 
             const val DEFAULT_HAND_DETECTION_CONFIDENCE = 0.5f
             const val DEFAULT_HAND_TRACKING_CONFIDENCE = 0.5f
-            const val DEFAULT_HAND_PRESENCE_CONFIDENCE = 0.001f
+            const val DEFAULT_HAND_PRESENCE_CONFIDENCE = 0.5f
             const val DEFAULT_NUM_HANDS = 2
         }
 
