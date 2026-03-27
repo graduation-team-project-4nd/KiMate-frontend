@@ -7,8 +7,8 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 object RetrofitClient {
-    private const val BASE_URL = "http://172.30.1.44:3000/"
-//    private const val BASE_URL = "http://192.168.105.100:3000/"
+//    private const val BASE_URL = "http://172.30.1.44:3000/"
+    private const val BASE_URL = "http://192.168.105.227:3000/"
 
     private val okHttpClient by lazy {
         // ⭐ [핵심] 통신 로그를 'BODY' 레벨로 설정
